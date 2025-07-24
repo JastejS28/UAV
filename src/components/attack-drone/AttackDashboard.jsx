@@ -733,11 +733,6 @@ const AttackDashboard = () => {
                 color: '#ccc',
                 fontSize: '0.7rem',
                 whiteSpace: 'nowrap'
-              },
-              '& .MuiSlider-markLabel': {
-                color: '#ccc',
-                fontSize: '0.7rem',
-                whiteSpace: 'nowrap'
               }
             }}
           />

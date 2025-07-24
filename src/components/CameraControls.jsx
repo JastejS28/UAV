@@ -23,7 +23,7 @@ const CameraControls = () => {
           size="small"
           sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
         >
-          Third Person
+          First Person
         </Button>
         <Button
           variant={cameraMode === 'first-person' ? 'contained' : 'outlined'}

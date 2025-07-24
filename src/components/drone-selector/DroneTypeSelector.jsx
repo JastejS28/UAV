@@ -35,9 +35,6 @@ const DroneTypeSelector = ({ value, onChange }) => {
       <ToggleButton value="attack" aria-label="attack drone">
         <RocketLaunchIcon sx={{ mr: 1 }} /> Attack
       </ToggleButton>
-      <ToggleButton value="swarm" aria-label="swarm drones">
-        <GroupsIcon sx={{ mr: 1 }} /> Swarm
-      </ToggleButton>
     </ToggleButtonGroup>
   );
 };

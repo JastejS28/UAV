@@ -6,19 +6,21 @@ export const useCameraStore = create((set, get) => ({
   
   // Camera settings for each mode
   cameraSettings: {
-    'third-person': {
-      offset: [0, 10, -15], // Behind and above the UAV
-      lookAtOffset: [0, 0, 0], // Look at UAV center
-      fov: 75
-    },
+  'third-person': {
+  offset: [0, 15, -1], // Increased the negative Z-offset to move the camera further back
+  lookAtOffset: [0, 0, 5],
+  fov: 65
+}
+
+,
     'first-person': {
-      offset: [0, 0, 2], // At the nose of the UAV
-      lookAtOffset: [0, 0, 20], // Look ahead
+      offset: [0, 5, 12], // Move camera slightly above and ahead of nose
+      lookAtOffset: [0, 0, 20],
       fov: 90
     },
     'down-facing': {
-      offset: [0, -2, 0], // Below the UAV
-      lookAtOffset: [0, -20, 0], // Look down
+      offset: [0, -2, 0],
+      lookAtOffset: [0, -20, 0],
       fov: 60
     }
   },
