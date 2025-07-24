@@ -10,11 +10,14 @@ import UavDamageSystem from '../anti-drone/UavDamageSystem';
 import CrashedUAV from './CrashedUAV'; // Import the new component
 
 const AttackUAV = () => {
+  // Update the component to always start at the base position:
+  const basePosition = [-45, 35, -40];
+  const { position, rotation, speed, isCrashed, droneType } = useUAVStore();
+  
   // Use surveillance drone model but with smaller scale until you have attack drone model
   const { scene } = useGLTF('/models/surveillance-uav/drone.glb');
   
   const uavRef = useRef();
-  const { position, rotation } = useUAVStore();
   const { 
     activeMissiles, 
     updateMissiles, 
@@ -25,10 +28,25 @@ const AttackUAV = () => {
     updateCrashAnimation // Add this new import
   } = useAttackDroneStore();
   
-  // Initialize the targets and position on mount
+  // Initialize the targets and spawn attack UAV at base position when attack mode is first activated
   useEffect(() => {
     console.log("AttackUAV mounted - initializing targets and position");
     initTargets();
+    
+    // FIXED: Spawn attack UAV at base position when component mounts
+    // Since AttackUAV component only renders in attack mode, we can spawn at base
+    const currentPos = useUAVStore.getState().position;
+    
+    // Check if UAV is at default position (0, 50, 0) - indicating fresh spawn
+    const isAtDefaultPosition = 
+      Math.abs(currentPos[0]) < 0.1 && 
+      Math.abs(currentPos[1] - 50) < 0.1 && 
+      Math.abs(currentPos[2]) < 0.1;
+    
+    if (isAtDefaultPosition) {
+      console.log("Spawning attack UAV at base position:", basePosition);
+      useUAVStore.getState().setPosition(basePosition);
+    }
   }, [initTargets]);
   
   useFrame((state, delta) => {

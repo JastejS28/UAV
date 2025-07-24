@@ -6,15 +6,21 @@ import * as THREE from 'three';
 const SCAN_RADIUS = 20; // Matching the detection radius in other components
 
 const ScanRadiusIndicator = () => {
-  const { position: uavPosition } = useUAVStore();
+  const { position: uavPosition, droneType } = useUAVStore();
   const sphereRef = useRef(null);
 
   useFrame(() => {
-    if (sphereRef.current) {
+    // Skip for attack drones
+    if (droneType !== 'surveillance') return;
+
+    if (sphereRef.current && uavPosition) {
       // Update the sphere's position to match the UAV's
       sphereRef.current.position.set(uavPosition[0], uavPosition[1], uavPosition[2]);
     }
   });
+
+  // Only render for surveillance drones
+  if (droneType !== 'surveillance') return null;
 
   return (
     <mesh ref={sphereRef}>

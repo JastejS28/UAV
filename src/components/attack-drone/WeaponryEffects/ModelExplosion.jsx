@@ -18,42 +18,41 @@ const ModelExplosion = ({ position, id, skipSound = false }) => {
       setFinished(true);
     }, 3000);
     
-    // Only play sound if skipSound is false
+    // FIXED: Only play sound if skipSound is false (prevent duplicate sounds)
     if (!skipSound) {
-      // Play explosion sound with multiple path attempts
-      const soundPaths = [
-        '/sounds/explosion.mp3',
-        '/assets/sounds/explosion.mp3',
-        '/public/sounds/explosion.mp3',
-        '/models/sounds/explosion.mp3',
-        '/explosion.mp3',
-        '/sounds/explosion.wav',
-        '/assets/sounds/explosion.wav'
-      ];
-      
-      // Try each path until one works
-      let played = false;
-      for (const path of soundPaths) {
-        if (played) break;
+      // Play explosion sound immediately when component mounts
+      const playSound = async () => {
+        const soundPaths = [
+          '/sounds/explosion.mp3',
+          '/assets/sounds/explosion.mp3',
+          '/public/sounds/explosion.mp3',
+          '/models/sounds/explosion.mp3',
+          '/explosion.mp3',
+          '/sounds/explosion.wav',
+          '/assets/sounds/explosion.wav'
+        ];
         
-        try {
-          const audio = new Audio(path);
-          audio.volume = 0.7;
+        // Try each path until one works
+        let played = false;
+        
+        for (const path of soundPaths) {
+          if (played) break;
           
-          // Use promise-based approach for better error handling
-          audio.play()
-            .then(() => {
-              console.log(`Successfully played explosion sound from: ${path}`);
-              played = true;
-            })
-            .catch(e => {
-              console.log(`Failed to play sound from ${path}: ${e.message}`);
-              // Continue to next path
-            });
-        } catch (error) {
-          console.log(`Error with sound at ${path}: ${error.message}`);
+          try {
+            const audio = new Audio(path);
+            audio.volume = 0.7;
+            
+            // Use promise-based approach for better error handling
+            await audio.play();
+            console.log(`Successfully played explosion sound from: ${path}`);
+            played = true;
+          } catch (error) {
+            console.log(`Error with sound at ${path}: ${error.message}`);
+          }
         }
-      }
+      };
+      
+      playSound();
     }
     
     return () => {
@@ -103,13 +102,15 @@ const ModelExplosion = ({ position, id, skipSound = false }) => {
 
   // Return the 3D model
   return (
-    <primitive 
-      ref={explosionRef}
-      object={scene.clone()}
-      position={position}
-      scale={[0.08, 0.08, 0.08]}
-      key={id || `expl-${startTime.current}`}
-    />
+    <group>
+      <primitive 
+        ref={explosionRef}
+        object={scene.clone()}
+        position={position}
+        scale={[0.08, 0.08, 0.08]}
+        key={id || `expl-${startTime.current}`}
+      />
+    </group>
   );
 };
 

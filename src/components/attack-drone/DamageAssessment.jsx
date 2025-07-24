@@ -7,19 +7,18 @@ import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 // Replace DirectionsTank with more common icons
 import MilitaryTechIcon from '@mui/icons-material/MilitaryTech'; // For tanks
 import ApartmentIcon from '@mui/icons-material/Apartment'; // For warehouses
+import PersonIcon from '@mui/icons-material/Person'; // For soldiers
 import { useAttackDroneStore } from '../../store/attackDroneStore';
+import { useUAVStore } from '../../store/uavStore'; // FIXED: Import useUAVStore to get targets
 
 const DamageAssessment = () => {
-  const { destroyedTargets, targets } = useAttackDroneStore();
+  const { destroyedTargets } = useAttackDroneStore();
+  const { targets } = useUAVStore(); // FIXED: Get targets from UAVStore instead of AttackDroneStore
   const [assessmentData, setAssessmentData] = useState({
     totalTargets: 0,
     destroyedCount: 0,
     percentage: 0,
-    targetBreakdown: {
-      tank: { total: 0, destroyed: 0 },
-      jeep: { total: 0, destroyed: 0 },
-      warehouse: { total: 0, destroyed: 0 }
-    },
+    targetBreakdown: {},
     recentStrikes: []
   });
 
@@ -27,12 +26,20 @@ const DamageAssessment = () => {
   useEffect(() => {
     if (!targets || !destroyedTargets) return;
     
-    // Count targets by type
-    const targetBreakdown = {
-      tank: { total: 0, destroyed: 0 },
-      jeep: { total: 0, destroyed: 0 },
-      warehouse: { total: 0, destroyed: 0 }
-    };
+    console.log("DamageAssessment - targets:", targets); // DEBUG: Check what targets we have
+    console.log("DamageAssessment - destroyedTargets:", destroyedTargets); // DEBUG: Check destroyed targets
+    
+    // FIXED: Dynamically create targetBreakdown based on actual targets
+    const targetBreakdown = {};
+    
+    // Initialize breakdown only for target types that actually exist
+    targets.forEach(target => {
+      if (!targetBreakdown[target.type]) {
+        targetBreakdown[target.type] = { total: 0, destroyed: 0 };
+      }
+    });
+    
+    console.log("DamageAssessment - targetBreakdown after init:", targetBreakdown); // DEBUG: Check breakdown
     
     // Count targets
     targets.forEach(target => {
@@ -48,6 +55,8 @@ const DamageAssessment = () => {
         targetBreakdown[target.type].destroyed++;
       }
     });
+    
+    console.log("DamageAssessment - final targetBreakdown:", targetBreakdown); // DEBUG: Check final breakdown
     
     // Calculate overall stats
     const totalTargets = targets.length;
@@ -84,12 +93,13 @@ const DamageAssessment = () => {
 
   const status = getStatusLevel(assessmentData.percentage);
   
-  // Get icon for target type - using available MUI icons
+  // Get icon for target type
   const getTargetIcon = (type) => {
     switch (type) {
       case 'tank': return <MilitaryTechIcon fontSize="small" />;
       case 'jeep': return <DirectionsCarIcon fontSize="small" />;
       case 'warehouse': return <ApartmentIcon fontSize="small" />;
+      case 'soldier': return <PersonIcon fontSize="small" />;
       default: return <ErrorOutlineIcon fontSize="small" />;
     }
   };
@@ -144,8 +154,8 @@ const DamageAssessment = () => {
       </Typography>
       
       <List dense disablePadding sx={{ mb: 2 }}>
-        {Object.entries(assessmentData.targetBreakdown).map(([type, data]) => (
-          data.total > 0 && (
+        {Object.entries(assessmentData.targetBreakdown)
+          .map(([type, data]) => ( // FIXED: Remove filter since targetBreakdown now only contains existing target types
             <ListItem key={type} disableGutters sx={{ py: 0.5 }}>
               <Box sx={{ display: 'flex', width: '100%', alignItems: 'center' }}>
                 <Box sx={{ pr: 1 }}>
@@ -181,8 +191,7 @@ const DamageAssessment = () => {
                 </Box>
               </Box>
             </ListItem>
-          )
-        ))}
+          ))}
       </List>
 
       {/* Recent Strikes */}

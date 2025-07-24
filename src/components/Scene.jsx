@@ -23,12 +23,18 @@ import TerrainClickHandler from './TerrainClickHandler'; // Add click handler
 import ClickIndicators from './ClickIndicators'; // Add visual indicators
 import LiveCameraView from './LiveCameraView'; // Import the new LiveCameraView
 import UAVController from './UAVController'; // Import the UAV controller
+import FlightPathVisualizer from './FlightPathVisualizer'; // Import flight path visualizer
 
 // Create a component to handle the scene content inside Canvas
-const SceneContent = ({ droneType }) => {
+const SceneContent = ({ droneType: propDroneType }) => {
   const { environmentMode } = useEnvironmentStore();
   const { cameraMode } = useCameraStore();
-  const { position } = useUAVStore(); // Get position from store
+  const { position, setDroneType } = useUAVStore(); // Get position from store
+  
+  // Update drone type in UAV store when prop changes
+  React.useEffect(() => {
+    setDroneType(propDroneType);
+  }, [propDroneType, setDroneType]);
   
   // Check if UAV has been spawned yet (not at default position)
   const hasSpawned = position[0] !== 0 || position[1] !== 50 || position[2] !== 0;
@@ -52,16 +58,16 @@ const SceneContent = ({ droneType }) => {
         far={10000} 
       />
       
-      {/* Keep OrbitControls always enabled for main view */}
+      {/* Reverted back to OrbitControls */}
       <OrbitControls 
-        target={[0, 25, 0]} 
-        maxPolarAngle={Math.PI / 2}
-        minDistance={5} 
-        maxDistance={500}
-        enableZoom={true}
-        enablePan={true}
-        screenSpacePanning={false}
-        minPolarAngle={0}
+      target={[0, 25, 0]} 
+      maxPolarAngle={Math.PI / 2}
+      minDistance={5} 
+      maxDistance={500}
+      enableZoom={true}
+      enablePan={true}
+      screenSpacePanning={false}
+      minPolarAngle={0}
       />
       
       {/* Environment specific lighting and sky */}
@@ -89,13 +95,16 @@ const SceneContent = ({ droneType }) => {
       {/* Only render the UAV if it has been spawned */}
       {hasSpawned && (
         <>
-          {droneType === 'surveillance' && <UAV />}
-          {droneType === 'attack' && <AttackUAV />}
+          {propDroneType === 'surveillance' && <UAV />}
+          {propDroneType === 'attack' && <AttackUAV />}
         </>
       )}
   
       {/* Add UAV Controller for advanced UAV management */}
       <UAVController />
+      
+      {/* Add Flight Path Visualizer */}
+      <FlightPathVisualizer />
     </>
   );
 };
@@ -113,23 +122,46 @@ const Scene = ({ droneType, liveViewPortalRef }) => {
   // }, [droneType]);
   
   return (
-    <Canvas 
-      shadows 
-      gl={{ antialias: true }}
-      style={{ 
-        background: environmentMode === 'night' ? '#000000' : (environmentMode === 'rain' ? '#33333D' : '#87CEEB'),
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%'
-      }}
-    >
-      <SceneContent droneType={droneType} />
-      {/* Add the new headless LiveCameraView renderer and pass the ref */}
-      <LiveCameraView portalRef={liveViewPortalRef} />
-    </Canvas>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* 3D Canvas */}
+      <Canvas 
+        shadows 
+        gl={{ antialias: true }}
+        style={{
+          background: environmentMode === 'night' ? '#000000' : (environmentMode === 'rain' ? '#33333D' : '#87CEEB'),
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%'
+        }}
+      >
+        <SceneContent droneType={droneType} />
+        {/* The LiveCameraView component is now correctly placed inside the Canvas,
+            and since it returns null, it won't cause rendering errors. */}
+        {liveViewPortalRef && <LiveCameraView portalRef={liveViewPortalRef} />}
+      </Canvas>
+      
+      {/* HTML Overlay elements can be placed here, outside the Canvas */}
+      <div style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', width: '100%', height: '100%' }}>
+        {/* Your HTML HUD elements here */}
+      </div>
+    </div>
   );
 };
 
 export default Scene;
+
+// For any component used inside Canvas/R3F:
+// Make sure they return proper Three.js elements
+
+// Wrong:
+// const MyComponent = () => <div>Something</div>;
+
+// Right:
+const MyComponent = () => <group>
+  <mesh>
+    <boxGeometry />
+    <meshStandardMaterial />
+  </mesh>
+</group>;

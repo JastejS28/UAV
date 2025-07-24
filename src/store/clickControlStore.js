@@ -29,8 +29,13 @@ export const useClickControlStore = create((set) => ({
     spawnIndicator: { position, type: 'spawn' } 
   }),
   
-  setClickIndicator: (position) => set({ 
-    clickIndicator: { position, type: 'click' } 
+  // Updated to ensure position is always an array
+  setClickIndicator: (positionOrObject) => set({
+    clickIndicator: positionOrObject ? 
+      (Array.isArray(positionOrObject) 
+        ? { position: positionOrObject, type: 'click', time: Date.now() } 
+        : { ...positionOrObject, time: Date.now() }) 
+      : null
   }),
   
   resetClickStates: () => set({

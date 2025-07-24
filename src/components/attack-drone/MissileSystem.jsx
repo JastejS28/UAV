@@ -16,49 +16,34 @@ const MissileSystem = () => {
   const MAX_SCORCH_MARKS = 10;
   
   // Check if a missile has reached its target and handle impact
-  const checkMissileImpact = useCallback(() => {
-    const impactedMissiles = activeMissiles.filter(missile => 
-      missile.flightProgress >= 1.0 && missile.flightProgress < 1.0 + missile.speed * 0.1
-    );
+  const handleMissileImpact = useCallback((missile) => {
+    // Add explosion
+    setExplosions(prev => [...prev, { id: missile.id, position: missile.targetPosition, timestamp: Date.now() }]);
     
-    if (impactedMissiles.length > 0) {
-      console.log("Missiles impacted targets:", impactedMissiles.length);
-      
-      // Create new explosions
-      const newExplosions = impactedMissiles.map(missile => ({
-        id: `explosion-${missile.id}-${Date.now()}`,
-        position: [...missile.targetPosition],
-        timestamp: Date.now()
-      }));
-      
-      // Create new scorch marks
-      const newScorchMarks = impactedMissiles.map(missile => ({
-        id: `scorch-${missile.id}-${Date.now()}`,
-        position: [...missile.targetPosition],
-        size: missile.weaponType === 'missile' ? 5 : 8,
-        timestamp: Date.now()
-      }));
-      
-      if (newExplosions.length > 0) {
-        setExplosions(prev => [...prev, ...newExplosions]);
-      }
-      
-      if (newScorchMarks.length > 0) {
-        setScorchMarks(prev => {
-          const combined = [...prev, ...newScorchMarks];
-          return combined.slice(-MAX_SCORCH_MARKS);
-        });
-      }
-    }
-    
-    // Clean up old explosions (after 5 seconds)
-    const now = Date.now();
-    setExplosions(prev => prev.filter(exp => now - exp.timestamp < 5000));
-  }, [activeMissiles]);
+    // Add scorch mark
+    setScorchMarks(prev => {
+      const newMarks = [...prev, { id: missile.id, position: missile.targetPosition, size: 6 }];
+      // Limit the number of scorch marks
+      return newMarks.length > MAX_SCORCH_MARKS ? newMarks.slice(newMarks.length - MAX_SCORCH_MARKS) : newMarks;
+    });
+
+    // Mark target as destroyed in the store
+    useAttackDroneStore.getState().destroyTarget(missile.targetId);
+
+  }, [MAX_SCORCH_MARKS]); // Dependencies for useCallback
   
   // Check for impacts on each frame
   useFrame(() => {
-    checkMissileImpact();
+    // Clean up old explosions (after 5 seconds)
+    const now = Date.now();
+    setExplosions(prev => prev.filter(exp => now - exp.timestamp < 5000));
+
+    // Find missiles that have just reached their target
+    activeMissiles.forEach(missile => {
+      if (missile.flightProgress >= 1.0 && !explosions.some(e => e.id === missile.id)) {
+        handleMissileImpact(missile);
+      }
+    });
   });
 
   return (

@@ -8,10 +8,10 @@ const ProjectileEffect = ({ startPosition, targetPosition, startTime, gunRef }) 
   const trailRef = useRef([]);
   const flightDuration = 1.5; // 1.5 seconds to reach target
   
-  useFrame((state) => {
+  useFrame(({ clock }) => {
     if (!projectileRef.current || !gunRef.current) return;
     
-    const elapsed = state.clock.elapsedTime - startTime;
+    const elapsed = clock.elapsedTime - startTime;
     const progress = Math.min(elapsed / flightDuration, 1);
     
     // Get gun's world position and orientation
@@ -46,11 +46,11 @@ const ProjectileEffect = ({ startPosition, targetPosition, startTime, gunRef }) 
       // Set projectile position
       projectileRef.current.position.copy(currentPos);
       
-      // Store trail points
+      // Store trail points - limit frequency to reduce load
       if (elapsed % 0.1 < 0.02) {
         trailRef.current.push({
           position: currentPos.clone(),
-          time: state.clock.elapsedTime
+          time: clock.elapsedTime
         });
       }
       
@@ -62,7 +62,24 @@ const ProjectileEffect = ({ startPosition, targetPosition, startTime, gunRef }) 
       );
       projectileRef.current.lookAt(lookAhead);
     }
+    
+    // Clean up old trail points
+    trailRef.current = trailRef.current.filter(
+      point => clock.elapsedTime - point.time < 0.5
+    );
   });
+  
+  // Render trail points
+  const trailPoints = trailRef.current.map((point, i) => (
+    <mesh key={`trail-${i}`} position={point.position.toArray()}>
+      <sphereGeometry args={[0.05, 8, 8]} />
+      <meshBasicMaterial 
+        color="#ff9900" 
+        transparent={true} 
+        opacity={Math.max(0, 1 - (startTime - point.time))} 
+      />
+    </mesh>
+  ));
   
   return (
     <group>
@@ -73,16 +90,7 @@ const ProjectileEffect = ({ startPosition, targetPosition, startTime, gunRef }) 
       </mesh>
       
       {/* Trails */}
-      {trailRef.current.map((point, i) => (
-        <mesh key={i} position={point.position.toArray()}>
-          <sphereGeometry args={[0.05, 8, 8]} />
-          <meshBasicMaterial 
-            color="#ff9900" 
-            transparent={true} 
-            opacity={Math.max(0, 1 - (state.clock.elapsedTime - point.time))} 
-          />
-        </mesh>
-      ))}
+      {trailPoints}
     </group>
   );
 };

@@ -11,6 +11,9 @@ const DefenseBomb = ({ startPosition, targetPosition, onComplete }) => {
   const [explosionPosition, setExplosionPosition] = useState(null);
   const [explosionTime, setExplosionTime] = useState(0);
   const trailPoints = useRef([]);
+  const explosionGroupRef = useRef();
+  const explosionSphereRef = useRef();
+  const explosionParticlesRef = useRef([]);
   
   // Add smoke trail generation
   useEffect(() => {
@@ -39,6 +42,27 @@ const DefenseBomb = ({ startPosition, targetPosition, onComplete }) => {
       const explodeDuration = 1.5;
       const timeElapsed = state.clock.elapsedTime - explosionTime;
       
+      // Animate the main explosion sphere
+      if (explosionSphereRef.current) {
+        const scale = timeElapsed * 10;
+        explosionSphereRef.current.scale.set(scale, scale, scale);
+        explosionSphereRef.current.material.opacity = Math.max(0, 1 - timeElapsed);
+      }
+
+      // Animate particles
+      explosionParticlesRef.current.forEach((particle, i) => {
+        if (particle) {
+          const angle = (i / 15) * Math.PI * 2;
+          const speed = particle.userData.speed;
+          particle.position.set(
+            Math.cos(angle) * speed * timeElapsed,
+            Math.sin(angle) * speed * timeElapsed + (timeElapsed * timeElapsed * -5),
+            Math.sin(angle * 2) * speed * timeElapsed
+          );
+          particle.material.opacity = Math.max(0, 1 - timeElapsed);
+        }
+      });
+
       // Remove explosion after duration
       if (timeElapsed > explodeDuration) {
         console.log("Explosion complete");
@@ -119,47 +143,33 @@ const DefenseBomb = ({ startPosition, targetPosition, onComplete }) => {
       
       {/* Explosion effect */}
       {hasExploded && explosionPosition && (
-        <group position={explosionPosition}>
+        <group ref={explosionGroupRef} position={explosionPosition}>
           {/* Explosion light */}
           <pointLight color="#ff7700" intensity={5} distance={15} decay={2} />
           
           {/* Explosion sphere */}
-          <mesh scale={[(state.clock.elapsedTime - explosionTime) * 10, 
-                       (state.clock.elapsedTime - explosionTime) * 10, 
-                       (state.clock.elapsedTime - explosionTime) * 10]}>
+          <mesh ref={explosionSphereRef}>
             <sphereGeometry args={[1, 16, 16]} />
             <meshBasicMaterial 
               color="orange" 
               transparent={true} 
-              opacity={Math.max(0, 1 - (state.clock.elapsedTime - explosionTime))} 
             />
           </mesh>
           
           {/* Explosion particles */}
-          {Array.from({ length: 15 }).map((_, i) => {
-            const angle = (i / 15) * Math.PI * 2;
-            const speed = 5 + Math.random() * 5;
-            const elapsed = state.clock.elapsedTime - explosionTime;
-            
-            return (
+          {Array.from({ length: 15 }).map((_, i) => (
               <mesh 
                 key={i} 
-                position={[
-                  Math.cos(angle) * speed * elapsed,
-                  Math.sin(angle) * speed * elapsed + (elapsed * elapsed * -5),
-                  Math.sin(angle * 2) * speed * elapsed
-                ]}
-                scale={[1, 1, 1]}
+                ref={el => explosionParticlesRef.current[i] = el}
+                userData={{ speed: 5 + Math.random() * 5 }}
               >
                 <sphereGeometry args={[0.8, 8, 8]} />
                 <meshBasicMaterial 
                   color={i % 2 ? "#ff7700" : "#ffaa00"} 
                   transparent={true} 
-                  opacity={Math.max(0, 1 - elapsed)} 
                 />
               </mesh>
-            );
-          })}
+          ))}
         </group>
       )}
     </group>

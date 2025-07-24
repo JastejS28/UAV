@@ -23,6 +23,11 @@ const AntiDroneSystem = ({ position, baseId }) => {
   const lastFireTime = useRef(Date.now()); // Initialize to prevent immediate fire on mount
   const lastBombTime = useRef(Date.now()); // Initialize to prevent immediate fire on mount
   const defenseSystemActive = useRef(true);
+  const prevTargetRef = useRef(null); // Ref to store the previous target position
+  const logRef = useRef({
+    lastLog: 0,
+    count: 0
+  });
   
   // Check for UAV detection
   useEffect(() => {
@@ -61,7 +66,7 @@ const AntiDroneSystem = ({ position, baseId }) => {
       setIsDefenseActive(false);
       setTargetPosition(null);
     }
-  }, [uavPosition, position, droneType, isDefenseActive, isUavDetected, targetPosition]);
+  }, [uavPosition, position, droneType]); // REMOVED state that is set inside the effect
 
   // Generate bombs and projectiles when defense is active
   useEffect(() => {
@@ -69,7 +74,10 @@ const AntiDroneSystem = ({ position, baseId }) => {
       // console.log("[AntiDroneSystem] Bomb/Projectile useEffect: SKIPPING - Defense not active or no target.");
       return;
     }
-    console.log("[AntiDroneSystem] Bomb/Projectile useEffect: ACTIVE. Target:", targetPosition);
+    if (process.env.NODE_ENV === 'development' && targetPosition !== prevTargetRef.current) {
+      prevTargetRef.current = targetPosition;
+      console.log("[AntiDroneSystem] Target updated:", targetPosition);
+    }
 
     const intervalId = setInterval(() => {
       const now = Date.now();
@@ -90,7 +98,8 @@ const AntiDroneSystem = ({ position, baseId }) => {
       if (now - lastBombTime.current > 1500) { // REDUCED INTERVAL
         lastBombTime.current = now;
         
-        const currentTarget = get().targetPosition; // Get latest targetPosition if it updated
+        // FIX: Use the targetPosition from the component's state, not an undefined 'get' function.
+        const currentTarget = targetPosition; 
         if (!currentTarget) {
             console.log("[AntiDroneSystem] Bomb drop skipped: targetPosition is null.");
             return;
@@ -123,12 +132,12 @@ const AntiDroneSystem = ({ position, baseId }) => {
     }, 500); // Check conditions every 500ms
 
     return () => {
-      console.log("[AntiDroneSystem] Bomb/Projectile useEffect: Cleanup interval.");
       clearInterval(intervalId);
     };
   // Ensure dependencies are correct for re-running this effect if targetPosition changes
   // or defense status changes. `position` is the defense system's own position.
-  }, [isDefenseActive, targetPosition, position, bombs]); // Added bombs to dependency to see if it helps with logging
+  // REMOVED `bombs` from dependency array to prevent infinite loop.
+  }, [isDefenseActive, targetPosition, position]);
 
   // Clean up old projectiles and bombs
   useEffect(() => {
@@ -165,6 +174,22 @@ const AntiDroneSystem = ({ position, baseId }) => {
     setBombs(prev => prev.filter(b => b.id !== id));
   };
   
+  // Replace frequent console.logs with this conditional logging helper
+  const conditionalLog = (message, data) => {
+    const now = Date.now();
+    if (now - logRef.current.lastLog > 5000) { // Log at most every 5 seconds
+      logRef.current.lastLog = now;
+      logRef.current.count = 0;
+      console.log(`[AntiDroneSystem] ${message}`, data);
+    } else {
+      logRef.current.count++;
+      // Only log the count on console every 100 skipped logs
+      if (logRef.current.count % 100 === 0) {
+        console.log(`[AntiDroneSystem] Skipped ${logRef.current.count} similar logs in last 5s`);
+      }
+    }
+  };
+
   return (
     <group position={position}>
       {/* Base defense radar visualization */}

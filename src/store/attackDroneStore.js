@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
 import { useUAVStore } from './uavStore';
+import { useTargetStore } from './targetStore';
 
 export const useAttackDroneStore = create((set, get) => ({
   // Basic targeting data
@@ -38,9 +39,6 @@ export const useAttackDroneStore = create((set, get) => ({
     const targets = useUAVStore.getState().targets || [];
     console.log("Initializing attack drone targets:", targets);
     set({ targets });
-    
-    // Reset position to home base
-    useUAVStore.setState({ position: [...get().homeBase] });
   },
   
   // Weapon selection
@@ -85,16 +83,21 @@ export const useAttackDroneStore = create((set, get) => ({
   },
   
   // Add the moveToPosition function and fix the targeting workflow
-  moveToPosition: (targetPosition) => {
-    // Set mission state to moving and save the target position
+  moveToPosition: (targetPos) => {
+    console.log("Attack drone moving to position:", targetPos);
+    
+    // Set the manual target position for the attack drone
     set({ 
-      missionState: 'moving',
-      attackPosition: targetPosition
+      manualTargetPosition: targetPos,
+      missionState: 'manual' // Set to manual movement mode
     });
     
-    // This would trigger the UAV movement in your simulation
-    // Once position is reached, the animation or physics system 
-    // should call the positionReached function
+    // CRITICAL FIX: Immediately update UAV store position for LiveCameraView
+    // This ensures the camera follows the UAV when moving via terrain clicks
+    useUAVStore.setState({ 
+      targetPosition: targetPos,
+      position: targetPos // Set both target and current position for immediate camera sync
+    });
   },
   
   // Called when UAV reaches its destination
@@ -107,45 +110,40 @@ export const useAttackDroneStore = create((set, get) => ({
   // Begin target lock - only works when in attacking state
   beginTargetLock: (targetId) => {
     const state = get();
-    if (state.missionState !== 'attacking') return;
+    if (state.missionState !== 'attacking') {
+      console.log("Cannot begin target lock - not in attacking state");
+      return;
+    }
     
     const target = state.targets.find(t => t.id === targetId);
-    if (!target) return;
+    if (!target) {
+      console.log("Target not found:", targetId);
+      return;
+    }
     
+    // Check if target has been detected by surveillance
+    const { detectedTargets } = useTargetStore.getState();
+    const isDetected = detectedTargets.some(detected => 
+      detected.id === targetId || 
+      (detected.position[0] === target.position[0] && 
+        detected.position[2] === target.position[2])
+    );
+    
+    if (!isDetected) {
+      console.log("Cannot target undetected object:", targetId);
+      return;
+    }
+    
+    // Continue with existing lock-on logic
     set({ 
       targeting: {
         ...state.targeting,
         lockedTarget: targetId,
-        lockStatus: 'acquiring',
+        lockStatus: 'seeking',
         lockTimer: 0,
-        maxLockTime: 3000 // 3 seconds to lock
+        maxLockTime: 3.0
       }
     });
-    
-    // Start lock-on process
-    const lockInterval = setInterval(() => {
-      set(state => {
-        if (state.targeting.lockTimer >= state.targeting.maxLockTime) {
-          // Target lock complete
-          clearInterval(lockInterval);
-          set({ 
-            targeting: {
-              ...state.targeting,
-              lockStatus: 'locked'
-            }
-          });
-          return state;
-        }
-        
-        // Update lock timer
-        return {
-          targeting: {
-            ...state.targeting,
-            lockTimer: state.targeting.lockTimer + 100
-          }
-        };
-      });
-    }, 100);
   },
   
   // Update target lock with time
@@ -182,6 +180,11 @@ export const useAttackDroneStore = create((set, get) => ({
   
   // Update UAV position during mission
   updateMissionMovement: (delta) => {
+    // THIS ENTIRE FUNCTION IS NOW DISABLED.
+    // All movement logic is centralized in UAVController.jsx to prevent conflicts.
+    return;
+
+    /*
     const { missionState, attackPosition, homeBase, attackSpeed, moveProgress, manualTargetPosition, manualMovementSpeed } = get();
     
     // Handle different movement states
@@ -302,6 +305,7 @@ export const useAttackDroneStore = create((set, get) => ({
     
     // Update movement progress
     set({ moveProgress: newProgress });
+    */
   },
   
   // Fire missile
@@ -311,13 +315,13 @@ export const useAttackDroneStore = create((set, get) => ({
     // Check if we can fire - must be in attacking state
     if (missionState !== 'attacking') {
       console.warn("Cannot fire: drone is not in attack position");
-      return;
+      return { success: false, error: "Drone not in attack position" };
     }
     
     // Check if we have lock and ammo
     if (targeting.lockStatus !== 'locked' || ammoCount[selectedWeapon] <= 0) {
       console.warn("Cannot fire: either no target locked or no ammo");
-      return;
+      return { success: false, error: "No target locked or no ammo" };
     }
     
     // Get target and UAV positions
@@ -325,21 +329,88 @@ export const useAttackDroneStore = create((set, get) => ({
     const target = targets.find(t => t.id === targeting.lockedTarget);
     if (!target) {
       console.error("Target not found");
-      return;
+      return { success: false, error: "Target not found" };
     }
     
     const uavPosition = useUAVStore.getState().position;
     
+    // ADDED: Weapon-specific firing conditions
+    const distanceToTarget = Math.sqrt(
+      Math.pow(uavPosition[0] - target.position[0], 2) +
+      Math.pow(uavPosition[2] - target.position[2], 2)
+    );
+    
+    // ADDED: Check weapon-specific requirements
+    if (selectedWeapon === 'bomb') {
+      // Bombs require UAV to be directly above target (within 10 meters horizontally)
+      if (distanceToTarget > 10) {
+        console.warn("Cannot drop bomb: UAV must be directly above target");
+        return { 
+          success: false, 
+          error: "Position UAV directly above target to drop bombs",
+          requiredDistance: 10,
+          currentDistance: distanceToTarget.toFixed(1)
+        };
+      }
+      
+      // ADDED: Check if UAV is at appropriate altitude above target
+      const altitudeDifference = Math.abs(uavPosition[1] - target.position[1]);
+      if (altitudeDifference < 15) {
+        console.warn("Cannot drop bomb: UAV must be higher above target");
+        return { 
+          success: false, 
+          error: "Gain altitude above target for safe bomb deployment",
+          requiredAltitude: "15m above target",
+          currentAltitude: altitudeDifference.toFixed(1) + "m"
+        };
+      }
+    } else if (selectedWeapon === 'missile') {
+      // UPDATED: Missiles now also require closer range (within 20 meters for realism)
+      if (distanceToTarget > 20) {
+        console.warn("Cannot fire missile: Target too far for engagement");
+        return { 
+          success: false, 
+          error: "Move closer to target for missile engagement",
+          requiredDistance: 20,
+          currentDistance: distanceToTarget.toFixed(1)
+        };
+      }
+    }
+    
+    // ADDED: General distance check for both weapons (realism requirement)
+    if (distanceToTarget > 20) {
+      console.warn("Cannot engage: Target too far for weapon deployment");
+      return { 
+        success: false, 
+        error: "Move within 20 meters of target to engage",
+        requiredDistance: 20,
+        currentDistance: distanceToTarget.toFixed(1)
+      };
+    }
+    
     // Create unique ID for missile
     const uniqueId = `missile-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     
-    // Create new missile
+    // FIXED: Validate target position is within terrain bounds
+    const validatePosition = (pos) => {
+      // Terrain bounds: X: -50 to 50, Z: -50 to 50, Y: 10 to 100
+      return [
+        Math.max(-50, Math.min(50, pos[0])),  // X bounds
+        Math.max(10, Math.min(100, pos[1])),  // Y bounds  
+        Math.max(-50, Math.min(50, pos[2]))   // Z bounds
+      ];
+    };
+    
+    // Ensure target position is within terrain bounds
+    const validTargetPosition = validatePosition(target.position);
+    
+    // Create new missile with validated target position
     const newMissile = {
       id: uniqueId,
       weaponType: selectedWeapon,
       targetId: targeting.lockedTarget,
       position: [...uavPosition],
-      targetPosition: [...target.position],
+      targetPosition: validTargetPosition,
       flightProgress: 0,
       speed: selectedWeapon === 'missile' ? 0.5 : 0.3, // progress per second
     };
@@ -369,6 +440,7 @@ export const useAttackDroneStore = create((set, get) => ({
     }
     
     console.log("Missile fired:", newMissile);
+    return { success: true };
   },
   
   // Add this to your store's state
@@ -383,7 +455,7 @@ export const useAttackDroneStore = create((set, get) => ({
     const updatedDestroyedTargets = [...destroyedTargets, targetId];
     set({ destroyedTargets: updatedDestroyedTargets });
     
-   
+    
     
     console.log(`Target destroyed: ${targetId} (${targetToDestroy.type})`);
   },
@@ -568,57 +640,30 @@ export const useAttackDroneStore = create((set, get) => ({
     });
   },
 
-  // Add a method to update the falling animation:
+  // DISABLED: Crash animation to prevent infinite loop errors
   updateCrashAnimation: (delta) => {
-    const { crashData, missionState } = get();
-    
-    if (missionState !== 'crashed' || !crashData.isFalling) return;
-    
-    // Get current position
-    const currentPos = useUAVStore.getState().position;
-    const currentRot = useUAVStore.getState().rotation || [0, 0, 0];
-    
-    // If we've reached the ground
-    if (currentPos[1] <= crashData.groundLevel) {
-      set({
-        crashData: {
-          ...crashData,
-          isFalling: false
-        }
-      });
-      
-      // Set final position at ground level
-      useUAVStore.setState({ 
-        position: [currentPos[0], crashData.groundLevel, currentPos[2]]
-      });
-      return;
-    }
-    
-    // Calculate new position with gravity
-    const newY = Math.max(crashData.groundLevel, currentPos[1] - (crashData.fallSpeed * delta));
-    
-    // Add some horizontal drift as it falls
-    const driftX = (Math.sin(Date.now() / 500) * 0.05) * crashData.fallSpeed;
-    const driftZ = (Math.cos(Date.now() / 700) * 0.05) * crashData.fallSpeed;
-    
-    // Update UAV position
-    useUAVStore.setState({ 
-      position: [
-        currentPos[0] + driftX * delta,
-        newY,
-        currentPos[2] + driftZ * delta
-      ],
-      // Add tumbling rotation
-      rotation: [
-        currentRot[0] + crashData.rotationSpeed[0],
-        currentRot[1] + crashData.rotationSpeed[1],
-        currentRot[2] + crashData.rotationSpeed[2]
-      ]
-    });
+    // Crash animation disabled to prevent setState infinite loops
+    // TODO: Implement crash animation without causing React state update loops
+    return;
   },
 
   // Add to your attackDroneStore.js if it's not already there
   setTargeting: (targeting) => {
     set({ targeting });
   },
+  
+  // Add this to the store:
+
+  setWeaponConfig: (config) => set(state => ({
+    weaponConfig: {
+      ...config
+    },
+    // Set default weapon
+    selectedWeapon: config.selectedWeapon || 'missile',
+    // CRITICAL FIX: Update ammo count based on mission configuration
+    ammoCount: {
+      missile: config.missileCount || state.ammoCount.missile,
+      bomb: config.bombCount || state.ammoCount.bomb
+    }
+  })),
 }));
