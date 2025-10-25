@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 export const useMissionStore = create((set, get) => ({
   missionStatus: 'planning', // planning, active, completed, failed
+  missionFailReason: '', // Reason for mission failure
   objectives: {
     hoverTime: 0,            // We won't use this for mission completion anymore
     requiredSurveillanceTime: 0, // Set to 0 as we're not using it
@@ -14,6 +15,7 @@ export const useMissionStore = create((set, get) => ({
   startMission: () => set({ 
     missionStatus: 'active', 
     missionTimeRemaining: get().missionMaxTime,
+    missionFailReason: '',
     objectives: {
       ...get().objectives,
       hoverTime: 0
@@ -22,16 +24,36 @@ export const useMissionStore = create((set, get) => ({
   
   completeMission: (status) => set({ missionStatus: status }),
   
-  resetMission: () => set({ 
-    missionStatus: 'planning', 
-    objectives: {
-      hoverTime: 0,
-      requiredSurveillanceTime: 0
-    },
-    missionTimeRemaining: 120,
-    isHovering: false,
-    currentTarget: null
-  }),
+  failMission: (reason) => {
+    console.log('[MissionStore] Mission Failed:', reason);
+    set({ 
+      missionStatus: 'failed',
+      missionFailReason: reason 
+    });
+  },
+  
+  resetMission: () => {
+    // Reset mission store state
+    set({ 
+      missionStatus: 'planning', 
+      missionFailReason: '',
+      objectives: {
+        hoverTime: 0,
+        requiredSurveillanceTime: 0
+      },
+      missionTimeRemaining: 120,
+      isHovering: false,
+      currentTarget: null
+    });
+
+    // Reset UAV battery when mission is reset
+    if (typeof window !== 'undefined') {
+      import('./uavStore').then(({ useUAVStore }) => {
+        const { setBattery } = useUAVStore.getState();
+        setBattery(100); // Reset battery to full
+      });
+    }
+  },
   
   updateMissionTime: (delta) => {
     const { missionStatus, missionTimeRemaining } = get();

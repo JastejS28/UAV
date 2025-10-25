@@ -12,6 +12,8 @@ import MissionPlanningScreen from './mission/MissionPlanningScreen';
 import MissionResultsScreen from './mission/MissionResultsScreen';
 import { useTargetStore } from '../store/targetStore';
 import { useHoverState } from '../hooks/useHoverState';
+import BatteryIndicator from './BatteryIndicator';
+import WindGustIndicator from './WindGustIndicator';
 
 const CommandDashboard = () => {
   // Extract all store values at the component top level
@@ -19,7 +21,7 @@ const CommandDashboard = () => {
   const { 
     position, rotation, setTargetPosition, isThermalVision, 
     setThermalVision, isCrashed, crashMessage, setPosition, targetPosition,
-    droneType // Add this to extract drone type
+    droneType, battery // Add battery to extract battery level
   } = useUAVStore();
   
   const { 
@@ -29,7 +31,8 @@ const CommandDashboard = () => {
     resetMission,
     objectives,
     isHovering,
-    currentTarget
+    currentTarget,
+    missionFailReason
   } = useMissionStore();
   
   const { clickMode, toggleMoveMode } = useClickControlStore();
@@ -81,6 +84,11 @@ const CommandDashboard = () => {
       return;
     }
     
+    if (battery <= 0) {
+      alert('Battery depleted! UAV has lost power.');
+      return;
+    }
+    
     const x = parseFloat(coordinates.x) || position[0];
     const y = parseFloat(coordinates.y) || position[1];
     const z = parseFloat(coordinates.z) || position[2];
@@ -92,7 +100,7 @@ const CommandDashboard = () => {
     
     setCoordinates({ x: '', y: '', z: '' });
     setTargetPosition(targetPos);
-  }, [coordinates, position, setTargetPosition, isCrashed]);
+  }, [coordinates, position, setTargetPosition, isCrashed, battery]);
 
   const handleCoordinateChange = useCallback((axis, value) => {
     setCoordinates(prev => ({ ...prev, [axis]: value }));
@@ -277,12 +285,15 @@ const CommandDashboard = () => {
   const missionType = useMissionStore(state => state.missionParameters?.missionType || 'surveillance');
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Box sx={{ p: 2, position: 'relative' }}>
       {/* Show Mission Planning or Results as overlays */}
       {renderMissionOverlay()}
       
       {/* Show Mission HUD for active missions */}
       {missionStatus === 'active' && <MissionHUD />}
+
+      {/* Wind Gust Indicator - Show during active missions */}
+      {missionStatus === 'active' && <WindGustIndicator />}
     
       {/* Crash Alert */}
       {isCrashed && (
@@ -351,6 +362,13 @@ const CommandDashboard = () => {
           Collision Detection: {isMoving ? '🔴 ACTIVE' : '🟢 STANDBY'}
         </Typography>
       </Paper>
+
+      {/* Battery Indicator - Show when mission is active */}
+      {missionStatus === 'active' && (
+        <Box sx={{ mb: 2 }}>
+          <BatteryIndicator />
+        </Box>
+      )}
 
       {/* Real-time Altitude Control Slider */}
       <Paper elevation={3} sx={{ p: 2, mb: 2 }}>

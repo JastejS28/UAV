@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Typography, LinearProgress, Paper, Chip } from '@mui/material';
 import { useMissionStore } from '../../store/missionStore';
+import BatteryIndicator from '../BatteryIndicator';
 
 const MissionHUD = () => {
   const {
@@ -108,6 +109,11 @@ const MissionHUD = () => {
           • Avoid detection<br />
           • Return to base before time expires
         </Typography>
+      </Box>
+
+      {/* Battery Indicator - Compact Version */}
+      <Box sx={{ mt: 2 }}>
+        <BatteryIndicator />
       </Box>
     </Paper>
   );

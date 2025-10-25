@@ -10,11 +10,11 @@ import ApartmentIcon from '@mui/icons-material/Apartment';
 import PersonIcon from '@mui/icons-material/Person';
 
 const MissionResultsScreen = ({ onRestart, onNewMission }) => {
-  const { missionStatus, objectives } = useMissionStore();
+  const { missionStatus, objectives, missionFailReason } = useMissionStore();
   const completedTargets = useTargetStore(state => state.completedTargets);
   const detectedTargets = useTargetStore(state => state.detectedTargets);
   const { destroyedTargets } = useAttackDroneStore();
-  const { targets } = useUAVStore();
+  const { targets, battery } = useUAVStore();
 
   const totalTargetsCompleted = typeof completedTargets === 'object' && completedTargets !== null
     ? Object.values(completedTargets).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
@@ -99,6 +99,24 @@ const MissionResultsScreen = ({ onRestart, onNewMission }) => {
           {isSuccessful ? '✅ Mission Successful' : '❌ Mission Failed'}
         </Typography>
         
+        {/* Show failure reason if mission failed */}
+        {!isSuccessful && missionFailReason && (
+          <Box sx={{ 
+            mb: 3, 
+            p: 2, 
+            bgcolor: 'rgba(244, 67, 54, 0.1)',
+            borderRadius: 2,
+            border: '2px solid rgba(244, 67, 54, 0.5)'
+          }}>
+            <Typography variant="h6" color="error.main" gutterBottom>
+              Failure Reason:
+            </Typography>
+            <Typography variant="body1" color="error.main">
+              {missionFailReason}
+            </Typography>
+          </Box>
+        )}
+        
         <Box sx={{ my: 3 }}>
           <Typography variant="h6" gutterBottom>
             Mission Statistics:
@@ -108,6 +126,9 @@ const MissionResultsScreen = ({ onRestart, onNewMission }) => {
           </Typography>
           <Typography variant="body1" gutterBottom>
             Targets Surveilled: {totalTargetsCompleted}
+          </Typography>
+          <Typography variant="body1" gutterBottom>
+            Final Battery Level: {Math.round(battery)}%
           </Typography>
           
           <Divider sx={{ my: 2 }} />

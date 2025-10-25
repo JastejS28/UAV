@@ -556,6 +556,8 @@ export const useUAVStore = create(
       isThermalVision: false,
       droneType: 'surveillance', // Add drone type to UAV store
       targets: [], // Add targets array
+      battery: 100, // Battery percentage (0-100)
+      uavStatus: 'idle', // idle, transit, hovering, attack, crashed
       
       // Actions
       setPosition: (newPosition) => {
@@ -651,6 +653,43 @@ export const useUAVStore = create(
       removeTarget: (targetId) => {
         const currentTargets = get().targets;
         set({ targets: currentTargets.filter(t => t.id !== targetId) });
+      },
+
+      // Battery management
+      setBattery: (value) => {
+        const clampedValue = Math.max(0, Math.min(100, value));
+        if (get().battery === clampedValue) return;
+        
+        set({ battery: clampedValue });
+        
+        // Check for power loss
+        if (clampedValue <= 0 && !get().isCrashed) {
+          get().setCrashed(true, 'Battery Depleted - Power Loss');
+          
+          // Import and call mission store's failMission
+          // We need to do this dynamically to avoid circular dependencies
+          if (typeof window !== 'undefined') {
+            import('./missionStore').then(({ useMissionStore }) => {
+              const { failMission, missionStatus } = useMissionStore.getState();
+              if (missionStatus === 'active') {
+                failMission('Battery Depleted - UAV Lost Power');
+              }
+            });
+          }
+          
+          console.log('[UAVStore] Battery depleted - UAV crashed, mission failed');
+        }
+      },
+
+      drainBattery: (amount) => {
+        const currentBattery = get().battery;
+        get().setBattery(currentBattery - amount);
+      },
+
+      setUAVStatus: (status) => {
+        if (get().uavStatus === status) return;
+        set({ uavStatus: status });
+        console.log('[UAVStore] UAV status changed to:', status);
       },
       
       // This method handles movement logic in one place

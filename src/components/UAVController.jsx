@@ -7,6 +7,7 @@ import { useClickControlStore } from '../store/clickControlStore';
 import { useAttackDroneStore } from '../store/attackDroneStore';
 import { useHoverState } from '../hooks/useHoverState';
 import { useTargetStore } from '../store/targetStore';
+import { useEnvironmentStore } from '../store/environmentStore';
 
 const UAVController = () => {
   const hoverState = useRef({
@@ -30,6 +31,12 @@ const UAVController = () => {
   const isInCooldown = useRef(false);
   const lastUpdateTime = useRef(0);
   const UPDATE_INTERVAL = 16; // milliseconds (approx 60fps)
+
+  // Wind gust tracking
+  const windGustTimer = useRef(0);
+  const WIND_GUST_MIN_INTERVAL = 10; // Minimum seconds between wind gusts
+  const WIND_GUST_MAX_INTERVAL = 30; // Maximum seconds between wind gusts
+  const nextWindGustTime = useRef(Math.random() * (WIND_GUST_MAX_INTERVAL - WIND_GUST_MIN_INTERVAL) + WIND_GUST_MIN_INTERVAL);
 
   // Initialize hover parameters based on target type
   const updateHoverParameters = (target) => {
@@ -207,7 +214,10 @@ const UAVController = () => {
     
     // Get all the state we need in a single call
     // FIX: Added 'droneType' to the destructuring assignment.
-    const { position, targetPosition, setPosition, setTargetPosition, targets, isCrashed, droneType } = useUAVStore.getState();
+    const { 
+      position, targetPosition, setPosition, setTargetPosition, targets, isCrashed, droneType,
+      battery, drainBattery, setUAVStatus, isThermalVision 
+    } = useUAVStore.getState();
     const { 
       isHovering, setIsHovering, currentTarget, setCurrentTarget, 
       objectives, updateHoverTime, missionTimeRemaining,
@@ -227,6 +237,81 @@ const UAVController = () => {
     
     // Don't update if crashed
     if (isCrashed || attackMissionState === 'crashed') return;
+
+    // ========== BATTERY DEPLETION LOGIC ==========
+    // Only drain battery if mission is active and UAV is not crashed
+    if (missionStatus === 'active' && !isCrashed && battery > 0) {
+      // Define drain rates per second
+      const DRAIN_RATES = {
+        idle: 0.5,           // Very slow drain when idle
+        transit: 1.0,        // Slow drain when moving normally
+        hovering: 2.0,       // Medium drain when hovering/surveilling
+        attack: 3.5,         // High drain during attack maneuvers
+        thermalExtra: 1.5    // Extra drain when thermal vision is active
+      };
+
+      let drainRate = DRAIN_RATES.idle; // Default to idle
+
+      // Determine current UAV activity and set drain rate accordingly
+      if (droneType === 'attack') {
+        // Attack drone consumes more power
+        if (attackMissionState === 'engaging' || attackMissionState === 'firing') {
+          drainRate = DRAIN_RATES.attack;
+          setUAVStatus('attack');
+        } else if (attackMissionState === 'moving' || attackMissionState === 'returning') {
+          drainRate = DRAIN_RATES.transit;
+          setUAVStatus('transit');
+        } else {
+          drainRate = DRAIN_RATES.idle;
+          setUAVStatus('idle');
+        }
+      } else {
+        // Surveillance drone
+        if (isHovering) {
+          drainRate = DRAIN_RATES.hovering;
+          setUAVStatus('hovering');
+        } else if (targetPosition) {
+          // Moving to target
+          drainRate = DRAIN_RATES.transit;
+          setUAVStatus('transit');
+        } else {
+          drainRate = DRAIN_RATES.idle;
+          setUAVStatus('idle');
+        }
+      }
+
+      // Add extra drain if thermal vision is active
+      if (isThermalVision) {
+        drainRate += DRAIN_RATES.thermalExtra;
+      }
+
+      // Calculate drain amount based on delta time
+      const drainAmount = drainRate * delta;
+      
+      // Drain the battery
+      drainBattery(drainAmount);
+    }
+    // ========== END BATTERY DEPLETION LOGIC ==========
+
+    // ========== WIND GUST TRIGGER LOGIC ==========
+    // Only trigger wind gusts during active missions
+    if (missionStatus === 'active' && !isCrashed) {
+      windGustTimer.current += delta;
+
+      // Check if it's time to trigger a wind gust
+      if (windGustTimer.current >= nextWindGustTime.current) {
+        const { triggerWindGust } = useEnvironmentStore.getState();
+        const triggered = triggerWindGust();
+        
+        if (triggered) {
+          // Reset timer and set next random interval
+          windGustTimer.current = 0;
+          nextWindGustTime.current = Math.random() * (WIND_GUST_MAX_INTERVAL - WIND_GUST_MIN_INTERVAL) + WIND_GUST_MIN_INTERVAL;
+          console.log(`[UAVController] Next wind gust in ${nextWindGustTime.current.toFixed(1)} seconds`);
+        }
+      }
+    }
+    // ========== END WIND GUST TRIGGER LOGIC ==========
 
     // CRITICAL: Update attack drone systems for attack mode
     if (droneType === 'attack') {
@@ -639,6 +724,11 @@ const UAVController = () => {
         cooldownTimer.current = null;
       }
       isInCooldown.current = false;
+
+      // Reset wind gust state
+      windGustTimer.current = 0;
+      const { resetWindGust } = useEnvironmentStore.getState();
+      resetWindGust();
     };
   }, []);
 
